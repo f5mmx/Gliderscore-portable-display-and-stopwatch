@@ -1,7 +1,11 @@
+
+
 /*
    GliderScore portable time display with stopwatch
-   version 1.01 April 28th, 2019
-   Based on O.Segouin wireless big display for GliderScore 
+   Initial release 1.01 April 28th, 2019
+   Release 1.1 May 16th, 2019 added battery level display for 1S and 2S batteries
+   
+   Based on O.Segouin wireless big display for GliderScore
 
    Because we had some conflicts on the SPI bus when both the display and the nRF24L01 module were connected
    on the same bus, we had to use a soft SPI for the 5110 display.
@@ -12,7 +16,7 @@
 */
 
 #include "RF24.h"
-#include <U8g2lib.h>  // Oled U8g2 library          from https://github.com/olikraus/U8g2_Arduino/archive/master.zip
+#include <U8g2lib.h>    // Oled U8g2 library          from https://github.com/olikraus/U8g2_Arduino/archive/master.zip
 #include <Arduino.h>
 
 // Variables and constants
@@ -27,7 +31,7 @@ char chrono[32] = "";
 uint16_t x, y;
 boolean flag = false;
 char sum;
-
+float compValue = 1.083538; //correction factor to match real resistors ratio used to measure battery level
 
 String temps;
 int bp = 2, fade = 0;
@@ -35,6 +39,8 @@ int raz = 14;
 
 int sensorValue = 0;
 int sensorPin = A0;
+int voltagePin = A4;
+
 volatile unsigned long debut;
 volatile byte marche = false;
 volatile unsigned long le_temps = 0, le_temps1 = 0;
@@ -46,6 +52,11 @@ String chronoS2 = "2";
 String chronoS3 = "3";
 String chronoS4 = "4";
 String statutS = "NO";
+float a_mini = 3.9;   //minimum battery voltage for display 1s
+float a_maxi = 4.2;   //maximum battery voltage for display 1s
+float tension;
+float iTension = 0;
+float ax, bx;
 
 U8G2_PCD8544_84X48_F_4W_SW_SPI u8g2(U8G2_R0, /* clock=*/ 7, /* data=*/ 6, /* cs=*/ 4, /* dc=*/ 3, /* reset=*/ 5);  // Nokia 5110 Display
 
@@ -72,8 +83,15 @@ void isr1(void) {
 }
 
 void setup(void) {
-  //  Serial.begin(9600);
-
+  Serial.begin(9600);
+  bx = 1744 / 81;
+  ax = (4 - bx) / 710;
+  iTension = analogRead(voltagePin);
+  tension = (iTension * ax) + bx;
+  if (tension > 5) { //if 2S battery then minimum and maximum voltages need to be adapted
+    a_mini = 6;   //minimum battery voltage for display 2s
+    a_maxi = a_maxi * 2; //maximum battery voltage for display 2s
+  }
   radio.begin();
   radio.openReadingPipe(0, address);
   radio.setChannel(1);// 108 2.508 Ghz
@@ -136,6 +154,11 @@ String checksum(String chaine)
 }
 
 void loop(void) {
+  iTension = analogRead(voltagePin);
+  tension = (iTension * ax) + bx;
+  if (tension > a_maxi) tension = a_maxi;
+  if (tension < a_mini) tension = a_mini;
+
   String Sep = " ";
 
   if ((millis() - tempo) >= 500) {
@@ -160,14 +183,13 @@ void loop(void) {
     }
   }
 
-
   if (!marche) {
     if (!digitalRead(raz)) {
       le_temps1 = 0; le_temps = 0;
     }
   }
   temps = cnv_temps(le_temps);
-  //  sensorValue = analogRead(sensorPin);
+
   u8g2.clearBuffer();
 
   u8g2.drawFrame(0, 0, 41, 14); //RND Frame
@@ -190,12 +212,17 @@ void loop(void) {
   u8g2.setCursor(74 - 6, 1 + 1 * 11);
   u8g2.print(groupe);
 
-  u8g2.setCursor(2, 17 + 11);
+  u8g2.setCursor(2 + 11, 17 + 11);
   u8g2.setFont(u8g2_font_7x14_tf);
   u8g2.print(statutS);
   u8g2.setFont(u8g2_font_8x13B_mn );
   u8g2.setCursor(35, 17 + 11);
   u8g2.print(chronoS);
+
+  u8g2.drawFrame(4, 28 - 10, 5, 3);
+  u8g2.drawFrame(3, 28 - 8, 7, 8);
+  int pile  = ((tension - a_mini) / (a_maxi - a_mini)) * 8; //compute battery level
+  u8g2.drawBox(3, 28 - pile, 7, pile);
 
   u8g2.setCursor(11, 33 + 11);
   u8g2.print(temps);
