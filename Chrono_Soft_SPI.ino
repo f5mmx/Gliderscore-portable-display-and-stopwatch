@@ -4,7 +4,7 @@
    GliderScore portable time display with stopwatch
    Initial release 1.01 April 28th, 2019
    Release 1.1 May 16th, 2019 added battery level display for 1S and 2S batteries
-   
+
    Based on O.Segouin wireless big display for GliderScore
 
    Because we had some conflicts on the SPI bus when both the display and the nRF24L01 module were connected
@@ -52,11 +52,12 @@ String chronoS2 = "2";
 String chronoS3 = "3";
 String chronoS4 = "4";
 String statutS = "NO";
-float a_mini = 3.9;   //minimum battery voltage for display 1s
-float a_maxi = 4.2;   //maximum battery voltage for display 1s
+float a_mini = 6.4;   //minimum battery voltage for display 2s
+float a_maxi = 8.4;   //maximum battery voltage for display 2s
 float tension;
 float iTension = 0;
 float ax, bx;
+bool bat_2s = true; // 2S battery used then TRUE, if 1s used should be FALSE
 
 U8G2_PCD8544_84X48_F_4W_SW_SPI u8g2(U8G2_R0, /* clock=*/ 7, /* data=*/ 6, /* cs=*/ 4, /* dc=*/ 3, /* reset=*/ 5);  // Nokia 5110 Display
 
@@ -84,13 +85,16 @@ void isr1(void) {
 
 void setup(void) {
   Serial.begin(9600);
-  bx = 1744 / 81;
-  ax = (4 - bx) / 710;
-  iTension = analogRead(voltagePin);
-  tension = (iTension * ax) + bx;
-  if (tension > 5) { //if 2S battery then minimum and maximum voltages need to be adapted
-    a_mini = 6;   //minimum battery voltage for display 2s
-    a_maxi = a_maxi * 2; //maximum battery voltage for display 2s
+  if (!bat_2s) {
+    bx = 1744 / 81;
+    ax = (4 - bx) / 710;
+    a_mini = 3.9;   //minimum battery voltage for display 1s
+    a_maxi = 4.2;   //maximum battery voltage for display 1s
+  } else {
+    bx = ((6.48 * 855) - 8.4 * 659) / 658;
+    ax = (8.4 - bx) / 855;
+    a_mini = 6.2;   //minimum battery voltage for display 2s
+    a_maxi = 8.4;   //maximum battery voltage for display 2s
   }
   radio.begin();
   radio.openReadingPipe(0, address);
